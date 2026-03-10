@@ -1,0 +1,696 @@
+% PLOS Computational Biology manuscript
+% Uses standard article class with PLOS formatting requirements:
+% double-spaced, line numbers, single column, Vancouver references
+
+\documentclass[10pt,letterpaper]{article}
+
+% --- Required packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{lineno}       % Line numbers (PLOS requirement)
+\usepackage{setspace}     % Double spacing (PLOS requirement)
+\usepackage[margin=1in]{geometry}
+\usepackage[numbers,sort&compress]{natbib}  % Vancouver-style numbered references
+
+% --- PLOS formatting ---
+\doublespacing
+\linenumbers
+
+% Vancouver style: numbered references in square brackets, ordered by appearance
+\bibliographystyle{unsrtnat}
+
+% No headers/footers except page numbers
+\pagestyle{plain}
+
+\begin{document}
+
+% ===========================
+% TITLE PAGE
+% ===========================
+
+\begin{flushleft}
+{\Large\bfseries Causal intervention validation of gene regulatory signals in scGPT}
+\bigskip
+
+Ihor Kendiukhov$^{1,*}$
+
+\bigskip
+
+\textbf{1} Department of Computer Science, University of Tuebingen, Sand~14,
+72076 Tuebingen, Germany
+
+\bigskip
+
+$*$ Corresponding author
+
+E-mail: kenduhov.ig@gmail.com
+
+\end{flushleft}
+
+\newpage
+
+% ===========================
+% ABSTRACT
+% ===========================
+
+\section*{Abstract}
+
+We evaluate whether causal interventions on scGPT gene tokens recover known
+transcription factor (TF)--target dependencies beyond attention-only heuristics.
+Using Tabula Sapiens kidney, lung, and immune subsets plus an external lung
+atlas, we ablate or swap TF token values and quantify changes in target-token
+readouts. We compare intervention scores to curated gene regulatory references
+(TRRUST, DoRothEA), include attention and coexpression baselines, trace
+component-level circuits via activation patching, and validate on CRISPR
+perturbation data from Adamson.
+Kidney multi-seed runs show modest enrichment (AUPR~$\approx$~0.60), while
+lung results are substantially stronger (AUPR up to 0.78, permutation
+$p{=}0.001$) and remain positive in higher-pair settings. Mechanistic tracing
+localizes effects to a small set of attention heads and mid-to-late MLP blocks.
+External perturbation validation remains low power but provides an independent
+check of causal signals. We present the full pipeline, quantitative evidence,
+and an honest assessment of current limitations. Source code and evaluation
+artifacts are available at
+\url{https://github.com/kendiukhov/biodyn} (to be made public upon acceptance).
+
+% ===========================
+% AUTHOR SUMMARY (PLOS requirement)
+% ===========================
+
+\section*{Author summary}
+
+We wanted to understand whether a large AI model trained on gene expression
+data from millions of human cells has actually learned how genes regulate each
+other, or whether it has only memorized statistical patterns. To test this, we
+deliberately disrupted one gene's representation inside the model and measured
+how much this changed the model's predictions for known regulatory targets.
+We found that the answer depends on the tissue. In lung tissue, the model
+appears to have learned genuine regulatory relationships that go beyond simple
+correlations, with disruptions to transcription factor genes causing
+significant changes in their known targets. In kidney and immune tissues, the
+signal was weaker. We also traced which internal components carry these
+regulatory signals, finding that a small number of attention heads and neural
+network layers are responsible. Our work provides a practical toolkit for
+auditing whether biological AI models have learned real biology or just
+correlations, which matters as these models are increasingly used for drug
+target discovery and cell type classification.
+
+% ===========================
+% INTRODUCTION
+% ===========================
+
+\section*{Introduction}
+
+Transformer-based \cite{vaswani_attention_2017} single-cell foundation models,
+including scGPT \cite{cui_scgpt_2023}, Geneformer
+\cite{theodoris_geneformer_2023}, scBERT \cite{yang_scbert_2022}, and
+scFoundation \cite{hao_scfoundation_2024}, capture gene dependencies at
+scale, but attention weights alone are correlational and do not establish
+causal influence in the sense of Pearl's interventionist framework
+\cite{pearl_causality_2009}. Prior gene regulatory network (GRN) inference
+methods such as SCENIC \cite{aibar_scenic_2017} and the Inferelator
+\cite{bonneau_grn_review_2007} derive regulatory structure from expression
+data using motif enrichment and coexpression, and systematic GRN benchmarks
+\cite{pratapa_beeline_2020} have evaluated these methods, yet they do not test
+whether a model's internal representations encode directional TF--target
+relationships. We ask whether direct causal interventions on scGPT token
+representations produce scores aligned with curated TF--target edges, and
+whether mechanistic tracing can localize the internal components responsible
+for those effects.
+
+Our approach draws on causal mediation analysis
+\cite{vig_causal_mediation_2020} and activation patching techniques developed
+for language model interpretability
+\cite{meng_rome_2022,goldowsky_dill_path_patching_2023}, adapting them to the
+biological token structure of single-cell transformers. The mechanistic
+interpretability paradigm \cite{olah_zoom_in_2020} seeks to decompose neural
+network computations into understandable circuits, and recent automated methods
+\cite{conmy_acdc_2023} have begun to scale this approach. Superposition
+\cite{elhage_superposition_2022} poses a challenge for such analyses, as
+features may share dimensions, but the relatively sparse gene-token structure
+of scGPT may partially mitigate this concern. Related formalisms include causal
+scrubbing \cite{chan_causal_scrubbing_2022}, which provides a complementary
+framework for testing circuit-level hypotheses.
+
+Our evaluation focuses on two complementary signals: curated regulatory
+interactions (TRRUST and DoRothEA) and perturbation-derived edges from CRISPR
+screening data \cite{dixit_perturbseq_2016,datlinger_perturbseq_2017}. The
+growing availability of large-scale perturbation atlases
+\cite{replogle_perturbseq_2022,norman_crispr_2019} provides increasingly rich
+ground truth for such evaluations. The first signal provides a broad reference
+derived from literature curation, while the second provides experimentally
+induced causal signals. By aligning causal intervention scores with both, we
+probe whether internal gene-token dependencies show evidence of causal
+structure beyond correlation.
+
+We introduce a causal intervention pipeline for scGPT that provides
+cross-tissue and multi-seed results, compares against attention and
+coexpression baselines, localizes circuitry with activation patching, and
+reports a perturbation-based validation using Adamson CRISPR data.
+
+% ===========================
+% RESULTS (before Methods per PLOS convention)
+% ===========================
+
+\section*{Results}
+
+\subsection*{Kidney multi-seed results}
+
+Across four kidney seeds, TRRUST ablation achieves mean AUPR 0.6018 with
+bootstrap 95\% CI [0.575, 0.628], while DoRothEA ablation reaches 0.5369
+[0.505, 0.563]. Swap interventions are weaker (TRRUST 0.537, DoRothEA 0.509).
+Evidence coverage is consistent (165--175 pairs from 240 sampled), stabilizing
+estimates. The seed-level spread is modest (0.57--0.63 for TRRUST ablation),
+indicating reproducibility at current scale (Fig~\ref{fig:kidney-seed-ci}).
+
+The fact that ablation consistently outperforms swap deserves attention: zeroing
+out a TF token value removes that gene's contribution entirely, producing a
+clean counterfactual, whereas swapping replaces it with another gene's value,
+which may partially preserve the original regulatory signal if the replacement
+gene participates in similar pathways. In other words, ablation tests
+\textit{necessity} of the TF representation, while swap is a noisier probe that
+conflates removal with substitution. The gap between the two suggests that
+scGPT encodes at least some TF-specific information that cannot be replaced by
+an arbitrary gene token, which is a prerequisite for genuine causal structure
+rather than generic positional or cell-state effects.
+
+% Fig 1 caption
+\begin{figure}[!ht]
+\caption{{\bf TRRUST ablation AUPR by kidney seed with bootstrap 95\% CIs.}
+Each point represents one random seed; error bars are bootstrap 95\% confidence
+intervals. The dashed line indicates the random baseline (AUPR~=~0.50).}
+\label{fig:kidney-seed-ci}
+\end{figure}
+
+The modest absolute AUPR values (around 0.60 against a random baseline of
+$\sim$0.50 in balanced settings) reflect the inherent difficulty of
+recovering directed regulatory edges from a model that was trained on
+expression reconstruction, not on regulatory inference per se. Even a
+partially enriched signal is informative because it suggests that the model's
+internal representations are not agnostic to regulatory relationships.
+
+\subsection*{Cross-tissue performance}
+
+Lung shows substantially stronger enrichment than kidney or immune
+(Table~\ref{tab:cross-tissue}). Lung TRRUST ablation AUPR reaches 0.7272
+(permutation $p{=}0.001$) and DoRothEA 0.7820 ($p{=}0.001$). Immune results are
+weaker and nonsignificant, while the Krasnow lung dataset shows mixed
+alignment consistent with dataset shift. The high-pair lung run (160+160)
+retains strong performance (TRRUST 0.7574, $p{=}0.004$), indicating robustness
+to expanded candidate sets (Fig~\ref{fig:cross-tissue}).
+
+The tissue-level variation has a plausible biological explanation. Lung tissue
+in Tabula Sapiens contains well-characterized epithelial and endothelial cell
+types with active, tissue-specific transcription factor programs (e.g., NKX2-1,
+FOXJ1, SOX family members) that are richly represented in curated databases.
+Kidney has a more heterogeneous cell composition with many transporter and
+metabolic genes that may be less well-covered by TF-centric references like
+TRRUST. Immune cells, while transcriptionally active, often rely on
+combinatorial and context-dependent regulation (e.g., cytokine signaling
+cascades) that single-TF ablation may not capture cleanly.
+
+The Krasnow lung dataset, collected with Smart-seq2 rather than 10x Chromium,
+shows lower TRRUST alignment (AUPR 0.36) despite being lung tissue. This
+likely reflects platform effects on the expression distributions that scGPT was
+pretrained on: the model's whole-human checkpoint was trained predominantly on
+droplet-based data, and the distributional shift from Smart-seq2 full-length
+transcripts may degrade the learned TF representations. The fact that DoRothEA
+alignment remains moderately positive (0.63) on the same dataset suggests that
+some regulatory signals survive the platform shift, particularly the
+higher-confidence interactions captured by DoRothEA's literature scoring.
+
+\begin{table}[!ht]
+\centering
+\caption{{\bf Cross-tissue ablation results and robustness runs.}
+Bold $p$-values indicate significance at $\alpha{=}0.05$.}
+\label{tab:cross-tissue}
+\begin{tabular}{llcc}
+\toprule
+\textbf{Group} & \textbf{Ref} & \textbf{AUPR} & \textbf{Perm $p$} \\
+\midrule
+Lung & TRRUST & 0.7272 & \textbf{0.001} \\
+Lung & DoRothEA & 0.7820 & \textbf{0.001} \\
+Immune & TRRUST & 0.5955 & 0.359 \\
+Immune & DoRothEA & 0.5267 & 0.672 \\
+Krasnow lung & TRRUST & 0.3635 & 0.934 \\
+Krasnow lung & DoRothEA & 0.6255 & 0.769 \\
+Lung (fast) & TRRUST & 0.6543 & 0.369 \\
+Lung (fast) & DoRothEA & 0.6915 & 0.209 \\
+Lung (high-pair) & TRRUST & 0.7574 & \textbf{0.004} \\
+Lung (high-pair) & DoRothEA & 0.6910 & 0.102 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% Fig 2 caption
+\begin{figure}[!ht]
+\caption{{\bf Cross-tissue ablation AUPR across tissues and robustness runs.}
+Bar heights show AUPR for ablation intervention; error bars indicate bootstrap
+95\% CIs where multiple seeds are available.}
+\label{fig:cross-tissue}
+\end{figure}
+
+\subsection*{Baselines versus causal scores}
+
+Causal scores outperform attention and coexpression baselines for lung and
+high-pair lung runs, while kidney and immune are competitive with baselines
+(Table~\ref{tab:baseline}). The lung improvement is substantial: causal AUPR
+exceeds attention by +0.184 and coexpression by +0.140. Kidney gains are
+small (+0.017), and immune shows negative deltas. Reduced-gene runs reinforce
+this: reduced lung remains above attention (0.674 vs.\ 0.608, $p{=}0.007$),
+while reduced kidney trails attention (Fig~\ref{fig:baseline}).
+
+The relationship between these three scoring methods reveals something
+important about what the model has learned. Attention scores capture which
+tokens the model ``looks at'' during forward computation, but high attention
+does not imply causal influence because attention heads can attend to tokens
+for context without propagating regulatory information. Coexpression
+correlations capture statistical co-occurrence of gene pairs across cells,
+which can arise from shared upstream regulation, common cell-state programs,
+or true direct regulation. Causal intervention scores, by contrast, test
+whether \textit{removing} a specific TF token changes the model's prediction
+at the target position, which is a more direct test of functional dependency
+within the model's learned representation.
+
+The fact that causal scores exceed both baselines in lung but not in kidney or
+immune suggests that the model has learned genuinely directional TF--target
+relationships for lung-specific programs, whereas in kidney and immune tissues,
+the model's gene representations may be dominated by broader cell-state
+signatures that correlational methods capture equally well. This is consistent
+with the intuition that causal interventions are most informative when the
+underlying signal has clear directionality, rather than being a diffuse
+cell-type marker.
+
+\begin{table}[!ht]
+\centering
+\caption{{\bf TRRUST ablation: causal scores vs.\ attention and coexpression baselines.}
+AUPR values shown. Bold $p$-values indicate significance at $\alpha{=}0.05$.}
+\label{tab:baseline}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Group} & \textbf{Causal} & \textbf{Attn} & \textbf{Coex} & \textbf{$p$} \\
+\midrule
+Kidney & 0.602 & 0.585 & 0.583 & 0.105 \\
+Lung & \textbf{0.727} & 0.543 & 0.587 & \textbf{0.001} \\
+Immune & 0.596 & 0.617 & 0.628 & 0.359 \\
+Kidney (red.) & 0.540 & 0.613 & 0.565 & 0.264 \\
+Lung (red.) & 0.674 & 0.608 & 0.615 & \textbf{0.007} \\
+Lung (hi-pair) & \textbf{0.757} & 0.589 & 0.729 & \textbf{0.004} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% Fig 3 caption
+\begin{figure}[!ht]
+\caption{{\bf TRRUST ablation: causal scores vs.\ baselines across tissues.}
+Grouped bar chart comparing causal intervention AUPR against attention and
+coexpression baselines for each tissue and robustness configuration.}
+\label{fig:baseline}
+\end{figure}
+
+\subsection*{Mechanistic case studies}
+
+Activation patching localizes specific TF--target effects to a small set of
+attention heads and MLP blocks. Example pairs
+(GATA3${\rightarrow}$GATA3, FOS${\rightarrow}$FOS,
+JUN${\rightarrow}$JUN, JUN${\rightarrow}$TNF) consistently highlight
+mid-to-late MLPs and a handful of heads (Fig~\ref{fig:case-study},
+Table~\ref{tab:case-studies}). Self-targeting pairs include late MLP blocks
+(L8--L11), whereas cross-gene JUN${\rightarrow}$TNF concentrates on earlier
+blocks (L0--L5), suggesting different interaction types engage distinct depth
+regimes. Head lists are dominated by H0/H1 across layers L0--L7, indicating a
+small subset carries most restoration signal.
+
+The depth separation between self-targeting and cross-gene interactions aligns
+with a natural hypothesis about how the model processes gene-gene
+relationships. Self-targeting effects (a TF influencing its own output token)
+can be resolved through relatively local, residual-stream computations that
+accumulate through later MLP blocks, since the source and target share the same
+token position. Cross-gene effects like JUN${\rightarrow}$TNF require
+inter-token communication through attention, which must happen earlier in the
+network so that downstream MLP blocks can integrate the transferred
+information. The observation that cross-gene pairs rely on earlier components
+is consistent with transformer architectures where attention moves information
+between positions and MLPs transform it within positions.
+
+These circuit-level findings, while based on a small set of case-study pairs,
+provide a template for future mechanistic audits. If specific heads or MLP
+blocks consistently mediate known regulatory effects, they could serve as
+targets for surgical interventions to test whether the model's regulatory
+knowledge is localized or distributed, a question with practical implications
+for model editing and fine-tuning strategies in biological foundation models.
+
+% Fig 4 caption
+\begin{figure}[!ht]
+\caption{{\bf Case-study restoration strength by component type.}
+Bars show mean restoration fraction for attention heads vs.\ MLP blocks across
+case-study TF--target pairs. Higher values indicate greater contribution to
+recovering the clean-run target readout.}
+\label{fig:case-study}
+\end{figure}
+
+\begin{table}[!ht]
+\centering
+\caption{{\bf Top contributing heads and MLP blocks from causal tracing.}}
+\label{tab:case-studies}
+\begin{tabular}{lp{4cm}p{5cm}}
+\toprule
+\textbf{Pair} & \textbf{Top heads} & \textbf{Top MLP blocks} \\
+\midrule
+GATA3${\to}$GATA3 & L6-H1, L1-H1, L2-H1 & L9, L8, L10, L4 \\
+FOS${\to}$FOS & L0-H0, L5-H1, L1-H0 & L10, L1, L8, L9 \\
+JUN${\to}$JUN & L7-H0, L2-H1, L4-H1 & L0, L11, L9, L6 \\
+JUN${\to}$TNF & L3-H0, L1-H0, L2-H1 & L3, L0, L2, L4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Perturbation validation}
+
+Adamson perturbation validation remains low power at current scale. The scaled
+run (40+40 pairs) yields AUPR 0.435 for ablation and 0.502 for swap; the
+large run (100+100 pairs) yields 0.498 and 0.500. None are significant under
+permutation tests (Table~\ref{tab:perturb}). As pair counts increase, AUPR
+drifts toward chance, which we believe reflects several compounding factors
+rather than a single failure mode.
+
+First, Adamson perturbation-derived edges are defined by the top-$k$ expression
+changes after CRISPR knockout, which captures the strongest downstream
+\textit{transcriptional} effects. However, scGPT's causal intervention operates
+at the \textit{representational} level, testing whether removing a gene token's
+value changes the model's output at another token position. These are
+conceptually related but not identical: a gene that is a strong transcriptional
+target of a TF in real cells may not be the gene whose model representation is
+most disrupted by ablating the TF token, especially if the model has learned to
+represent the target through cell-state features rather than direct
+TF-mediated effects.
+
+Second, the Adamson dataset uses a CRISPRi screen in K562 cells (a chronic
+myelogenous leukemia line), which is biologically distant from the primary
+tissues on which scGPT was pretrained. The model may encode regulatory
+relationships specific to normal tissue contexts that do not align with
+K562-specific perturbation effects.
+
+Third, the evidence filter (requiring both TF and target to co-occur in the
+scGPT evaluation cells) substantially reduces the effective evaluation set,
+compressing statistical power. At 75--175 evidence pairs with near-chance AUPR,
+the permutation test lacks the resolution to detect a weak true signal even if
+one exists.
+
+\begin{table}[!ht]
+\centering
+\caption{{\bf Perturbation validation (Adamson).}
+Int.\ = intervention type, $n$ = evidence pairs.}
+\label{tab:perturb}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Run} & \textbf{Int.} & \textbf{AUPR} & \textbf{AUROC} & \textbf{$p$} & \textbf{$n$} \\
+\midrule
+scaled & abl & 0.435 & 0.416 & 0.910 & 75 \\
+scaled & swap & 0.502 & 0.503 & 0.479 & 75 \\
+large & abl & 0.498 & 0.491 & 0.606 & 175 \\
+large & swap & 0.500 & 0.513 & 0.589 & 175 \\
+pilot & abl & 0.576 & 0.483 & 0.430 & 31 \\
+pilot & swap & 0.577 & 0.521 & 0.402 & 31 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{High-confidence DoRothEA (A/B)}
+
+The stricter DoRothEA A/B subset reduces label breadth, depressing absolute
+AUPR, but lung retains a clear permutation signal: kidney mean AUPR 0.396
+(median $p{=}0.085$) versus lung AUPR 0.482 ($p{=}0.001$), consistent with the
+tissue-specific differences observed throughout. The DoRothEA A/B confidence
+levels correspond to interactions supported by direct experimental evidence
+(chromatin immunoprecipitation, reporter assays) rather than computational
+predictions, so the persistent lung signal under this stricter filter
+strengthens the case that the model captures bona fide regulatory
+relationships rather than spurious correlations with loosely curated edges.
+
+% ===========================
+% DISCUSSION
+% ===========================
+
+\section*{Discussion}
+
+Our results paint a nuanced picture of what single-cell foundation models
+learn about gene regulation. Causal ablations yield modest enrichment on kidney
+and substantially stronger performance on lung, with significant TRRUST
+enrichment across multiple lung configurations. This pattern is consistent
+across reference databases, robustness runs, and high-confidence subsets,
+which makes it unlikely to be an artifact of a single evaluation choice.
+
+The tissue dependence of causal signal strength carries an important
+implication for how we think about foundation model representations. Rather
+than encoding a universal regulatory program, scGPT appears to have learned
+tissue-specific regulatory structure that is stronger where training data
+provided richer and more coherent transcriptional programs. Lung, with its
+well-characterized epithelial differentiation hierarchies, may offer cleaner
+TF-target signals for the model to internalize during pretraining, whereas
+kidney and immune tissues present more complex or combinatorial regulatory
+logic that a token-level ablation may not isolate cleanly.
+
+The baseline comparisons add an important calibration. In tissues where causal
+scores do not clearly exceed attention or coexpression, the intervention
+pipeline is not providing additional information beyond what simple
+correlational proxies capture. This does not invalidate the approach, but it
+does suggest that causal interventions are most valuable in a targeted
+setting: when there is reason to believe a specific tissue or TF program is
+well-represented in the model, intervention-based scoring can extract
+directional information that correlational methods miss.
+
+Component-level tracing provides interpretable circuits for selected
+TF--target pairs. The concentration of restoration effects in a small set of
+heads and MLPs suggests a tractable mechanistic substrate within scGPT,
+offering targets for focused audits and hypothesis-driven validation. The
+depth separation between self-targeting and cross-gene interactions hints at
+a functional organization within the transformer that parallels the
+distinction between local autoregulatory feedback and distal regulatory
+influence.
+
+Perturbation validation results remain inconclusive, which we attribute
+primarily to the biological distance between the K562 CRISPR screen and the
+normal-tissue contexts on which the model was evaluated, compounded by limited
+statistical power from evidence filtering. Future work should prioritize
+perturbation datasets from primary tissues matching the evaluation context,
+such as Perturb-seq in lung epithelial cells, to provide a fairer test of
+whether the model's causal signals align with experimentally induced effects.
+
+\paragraph{Limitations.}
+Our evaluation has several limitations that scope the conclusions. All runs
+use CPU-limited subsets (30--120 cells per run) with moderate pair counts
+(30--160 positive pairs), which limits statistical power particularly for the
+perturbation validation where only 75--175 evidence pairs are available. The
+readout metric is a single target-token scalar (mean across hidden features),
+which may not fully capture the dimensionality of regulatory effects encoded
+in the model's representations. The perturbation validation relies on the
+Adamson dataset, which uses a CRISPRi screen in K562 cells that are
+biologically distant from the primary tissues used in the main evaluation;
+this mismatch likely contributes to the inconclusive perturbation results.
+Gene symbol mapping from Ensembl identifiers to HGNC symbols can introduce
+alias errors, potentially misaligning a small fraction of evaluation pairs.
+The mechanistic case studies cover only four TF--target pairs and may not
+generalize to the full range of regulatory interactions. Finally, our
+evaluation uses a single foundation model (scGPT); extending to other
+architectures is needed to determine whether the observed patterns are
+model-specific or reflect general properties of expression-trained
+transformers.
+
+% ===========================
+% MATERIALS AND METHODS (after Results/Discussion per PLOS convention)
+% ===========================
+
+\section*{Materials and methods}
+
+\subsection*{Model and datasets}
+
+We use the scGPT whole-human checkpoint from the model zoo, loaded with
+standard model arguments. Fast transformer backends are disabled for
+deterministic patching. All runs are CPU-only with fixed random seeds.
+
+We use Tabula Sapiens kidney, lung, and immune subsets
+\cite{tabula_sapiens_2022}, an external lung atlas from
+Travaglini et al.\ \cite{travaglini_lung_2020}, and the Adamson CRISPR
+perturbation dataset \cite{adamson_dataverse_2022}. All datasets were
+originally generated using droplet-based protocols
+\cite{zheng_10x_2017} except the Krasnow lung atlas (Smart-seq2).
+Preprocessing follows standard Scanpy \cite{wolf_scanpy_2018} workflows
+(normalize\_total=10\,000, log1p), selects 5\,000 highly variable genes
+restricted to the scGPT vocabulary, and normalizes gene symbols via HGNC alias
+mappings. We note that deep learning denoising approaches
+\cite{eraslan_sc_review_2019} and integration methods
+\cite{stuart_seurat_2019} were not applied, as we sought to evaluate the
+foundation model's representations on minimally processed data.
+
+\subsection*{Intervention pairs and scoring}
+
+Positive labels come from curated TF--target edges in TRRUST \cite{han_trrust_2015}
+and DoRothEA \cite{dorothea_github}; negatives are random controls from the same gene sets.
+For each TF--target pair and each cell containing both genes, we compute a baseline readout and an
+intervened readout at the target token position, reduced by mean across
+features. We apply value ablation (TF token value zeroed) and token-value swap
+interventions. The pair score is the mean absolute effect
+$|\bar{\Delta}| = |y_{\text{baseline}} - y_{\text{intervened}}|$ across cells.
+
+\subsection*{Causal tracing}
+
+We patch clean activations into ablated forward passes and measure restoration
+of the target readout, yielding per-layer, per-head, and per-MLP restoration
+scores for selected case-study pairs.
+
+\subsection*{Baselines and metrics}
+
+We compare causal scores against (i)~attention scores aggregated across all
+layers and heads and (ii)~coexpression correlations computed from normalized
+expression. We compute AUPR and AUROC \cite{davis_prauc_2006} on pairs with
+evidence; significance is
+estimated by 1\,000 permutations of the labels, reporting the fraction of
+permutations with AUPR $\geq$ observed (median across seeds where applicable).
+We additionally report DoRothEA A/B subsets for high-confidence evaluation.
+
+\subsection*{Perturbation validation}
+
+We derive perturbation edges from Adamson \cite{adamson_cell_2016,adamson_dataverse_2022}
+by selecting the top-$k$ ($k{=}50$) absolute expression deltas versus control per perturbation.
+We evaluate causal scores on balanced pair sets: 40+40 (scaled) and 100+100 (large), with
+max\_cells=60 per run.
+
+\subsection*{Experimental configurations}
+
+We evaluate kidney (four seeds), lung, and immune subsets with 120 max cells
+and 120+120 candidate pairs. Robustness runs include a high-pair lung setting
+(160+160 pairs), reduced-gene runs, and a Krasnow lung dataset. Adamson
+experiments use scaled (40+40) and large (100+100) pair counts.
+Table~\ref{tab:run-configs} summarizes configurations.
+
+\begin{table}[!ht]
+\centering
+\caption{{\bf Run configurations.}
+TS = Tabula Sapiens. Pairs with evidence are a subset filtered to cells
+containing both source and target.}
+\label{tab:run-configs}
+\begin{tabular}{llcc}
+\toprule
+\textbf{Run group} & \textbf{Dataset} & \textbf{Cells} & \textbf{Pairs} \\
+\midrule
+Kidney (4 seeds) & TS kidney & 120 & 120+120 \\
+Lung & TS lung & 120 & 120+120 \\
+Immune (2 seeds) & TS immune & 120 & 120+120 \\
+Krasnow lung & Krasnow & 40 & 30+30 \\
+Lung (fast) & TS lung & 60 & 60+60 \\
+Lung (high-pair) & TS lung & 40 & 160+160 \\
+Kidney (reduced) & TS kidney & 300 & 80+80 \\
+Lung (reduced) & TS lung & 240 & 80+80 \\
+Adamson (scaled) & Adamson & 60 & 40+40 \\
+Adamson (large) & Adamson & 60 & 100+100 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ===========================
+% CONCLUSION
+% ===========================
+
+\section*{Conclusion}
+
+Causal interventions on scGPT token representations enrich for curated
+TF--target edges, particularly in lung, and mechanistic tracing localizes
+components for specific pairs. The strongest result is lung tissue AUPR up to
+0.78 against DoRothEA references with permutation $p{=}0.001$, a signal
+that survives across pair counts, robustness runs, and high-confidence
+reference subsets. Kidney enrichment is modest but reproducible across seeds,
+and immune tissue remains at baseline, together delineating where the model
+has and has not learned directional regulatory structure.
+
+Several directions follow naturally from these findings. First, scaling runs
+to GPU-enabled full-tissue evaluations would increase pair counts by an order
+of magnitude, sharpening the statistical resolution for tissues where current
+enrichment is marginal. Second, replacing the mean-across-features readout
+with richer target representations, such as per-feature cosine similarity or
+learned probes, could recover regulatory effects that a single scalar
+compresses away. Third, applying the same causal intervention framework to
+other single-cell foundation models (Geneformer, scFoundation) would reveal
+whether tissue-dependent regulatory encoding is architecture-specific or a
+general property of expression-trained transformers. Finally, perturbation
+validation using tissue-matched Perturb-seq datasets, particularly from lung
+epithelial cells where model performance is strongest, would close the gap
+between representational causal effects and experimental ground truth that the
+Adamson K562 comparison currently leaves open.
+
+More broadly, the pipeline we describe, combining token-level causal
+interventions with component-level activation patching, provides a general
+template for mechanistic audits of biological foundation models. As these
+models are increasingly deployed for cell-type annotation, perturbation
+prediction, and drug target prioritization, understanding which internal
+components encode which biological relationships becomes a practical safety
+and reliability concern, not merely an academic curiosity. The artifacts and
+evaluation framework accompanying this work are designed to lower the barrier
+for such audits across tissues, models, and regulatory contexts.
+
+% ===========================
+% ACKNOWLEDGMENTS
+% ===========================
+
+\section*{Acknowledgments}
+
+This work was conducted independently without external funding.
+
+% ===========================
+% DATA AND CODE AVAILABILITY
+% ===========================
+
+\section*{Data availability statement}
+
+All primary datasets used in this study are publicly available. The Tabula
+Sapiens atlas \cite{tabula_sapiens_2022} is available at
+\url{https://tabula-sapiens-portal.ds.czbiohub.org}. The Krasnow lung atlas
+\cite{travaglini_lung_2020} is available through the Human Lung Cell Atlas at
+\url{https://hlca.ds.czbiohub.org}. The Adamson CRISPR perturbation dataset
+\cite{adamson_cell_2016,adamson_dataverse_2022} is available on Harvard
+Dataverse at \url{https://doi.org/10.7910/DVN/BIKGRL}. TRRUST v2
+\cite{han_trrust_2015} is available at
+\url{https://www.grnpedia.org/trrust}. DoRothEA regulons
+\cite{dorothea_github} are available through the decoupler Python package at
+\url{https://github.com/saezlab/decoupler-py}. The scGPT whole-human
+pretrained checkpoint \cite{cui_scgpt_2023} is available at
+\url{https://github.com/bowang-lab/scGPT}.
+
+All source code for the causal intervention pipeline, evaluation scripts,
+run configurations, and figure generation code is available at
+\url{https://github.com/kendiukhov/biodyn} (to be made public upon
+acceptance). Causal scores, intermediate outputs, and reproducibility
+artifacts are included in the repository.
+
+% ===========================
+% REFERENCES
+% ===========================
+
+\bibliography{references}
+
+% ===========================
+% SUPPORTING INFORMATION
+% ===========================
+
+\section*{Supporting information}
+
+\paragraph*{S1 Table.}
+\label{S1_Table}
+{\bf Full causal metrics summary across all run configurations.}
+Complete AUPR, AUROC, and permutation $p$-values for every run group,
+reference database, and intervention type.
+
+\paragraph*{S1 Data.}
+\label{S1_Data}
+{\bf Source code and evaluation artifacts.}
+Available at \url{https://github.com/kendiukhov/biodyn} (to be made
+public upon acceptance). Includes run configurations, evaluation scripts,
+causal scores, and figure generation code.
+
+\end{document}

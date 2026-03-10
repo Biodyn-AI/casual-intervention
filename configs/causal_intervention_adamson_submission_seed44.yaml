@@ -1,0 +1,61 @@
+project:
+  name: scgpt-mechinterp-causal-adamson-submission-seed44
+  seed: 44
+paths:
+  scgpt_repo: external/scGPT
+  scgpt_checkpoint: external/scGPT_checkpoints/whole-human/best_model.pt
+  scgpt_vocab: external/scGPT_checkpoints/whole-human/vocab.json
+  processed_h5ad: data/perturb/adamson/perturb_processed_symbols.h5ad
+  hgnc_alias_tsv: external/hgnc_complete_set.txt
+  dorothea_tsv: external/networks/trrust_human.tsv
+  causal_output_dir: outputs/causal_adamson_submission_seed44
+scgpt_dataset:
+  max_genes: 800
+  include_zero: false
+  sort_by_expression: true
+  pad_token_id: null
+  cls_token_id: null
+model:
+  entrypoint: scgpt.model.TransformerModel
+  model_args: {}
+  prefix_to_strip: null
+  forward_key_map:
+    gene_ids: src
+    gene_values: values
+    src_key_padding_mask: src_key_padding_mask
+evaluation:
+  dorothea_confidence:
+  - A
+  - B
+  - C
+  - D
+causal_intervention:
+  output_dir: outputs/causal_adamson_submission_seed44
+  max_cells: 80
+  cell_sample_mode: random
+  cell_sample_seed: 44
+  batch_size: 1
+  disable_fast_transformer: true
+  torch_num_threads: 1
+  torch_num_interop_threads: 1
+  resume: true
+  checkpoint_path: outputs/causal_adamson_submission_seed44/checkpoint.json
+  checkpoint_every_pairs: 10
+  progress_every_pairs: 10
+  interventions:
+  - ablation
+  ablation_mode: value
+  baseline_value: 0.0
+  swap_strategy: random
+  output_key: null
+  output_reduce: mean
+  max_cells_per_pair: 6
+  max_pairs: 0
+  random_control_pairs: 0
+  random_seed: 44
+  pairs_path: configs/perturbation_pairs_adamson_large.tsv
+  primary_intervention: ablation
+  case_study_count: 3
+  score_mode: abs
+  tracing:
+    enabled: false

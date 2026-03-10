@@ -1,0 +1,82 @@
+project:
+  name: scgpt-mechinterp-causal-heads
+  seed: 42
+
+paths:
+  scgpt_repo: external/scGPT
+  scgpt_checkpoint: external/scGPT_checkpoints/whole-human/best_model.pt
+  scgpt_vocab: external/scGPT_checkpoints/whole-human/vocab.json
+  tabula_sapiens_h5ad: data/raw/tabula_sapiens_kidney.h5ad
+  gene_info_csv: external/gene_info.csv
+  hgnc_alias_tsv: external/hgnc_complete_set.txt
+  processed_h5ad: outputs/tabula_sapiens_processed.h5ad
+  dorothea_tsv: external/networks/trrust_human.tsv
+  causal_output_dir: outputs/causal_heads
+
+preprocess:
+  min_genes: 200
+  min_cells: 3
+  normalize_total: 10000
+  log1p: true
+  hvg: 5000
+
+scgpt_dataset:
+  max_genes: 1200
+  include_zero: false
+  sort_by_expression: true
+  pad_token_id: null
+  cls_token_id: null
+
+model:
+  entrypoint: scgpt.model.TransformerModel
+  model_args: {}
+  prefix_to_strip: null
+  forward_key_map:
+    gene_ids: src
+    gene_values: values
+    src_key_padding_mask: src_key_padding_mask
+
+evaluation:
+  dorothea_confidence:
+    - A
+    - B
+    - C
+    - D
+
+causal_intervention:
+  output_dir: outputs/causal_heads_case_v3
+  max_cells: 10
+  batch_size: 1
+  disable_fast_transformer: true
+  torch_num_threads: 1
+  torch_num_interop_threads: 1
+  resume: false
+  debug_log: false
+  checkpoint_path: outputs/causal_heads_case_v3/checkpoint.json
+  checkpoint_every_pairs: 1
+  progress_every_pairs: 1
+  interventions:
+    - ablation
+    - swap
+  ablation_mode: value
+  baseline_value: 0.0
+  swap_strategy: random
+  output_key: null
+  output_reduce: mean
+  max_pairs: 0
+  random_control_pairs: 0
+  random_seed: 42
+  candidate_sources_path: null
+  candidate_targets_path: null
+  pairs_path: configs/causal_pairs_case_studies.tsv
+  primary_intervention: ablation
+  case_study_count: 5
+  case_study_component_count: 5
+  score_mode: abs
+  tracing:
+    enabled: true
+    granularity: attention_head
+    max_heads_per_layer: 2
+    patch_position: source
+    normalize_restoration: true
+    pairs_path: configs/causal_pairs_case_studies.tsv

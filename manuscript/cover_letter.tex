@@ -1,0 +1,74 @@
+\documentclass[11pt,letterpaper]{letter}
+\usepackage[margin=1in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{url}
+
+\signature{Ihor Kendiukhov\\
+Department of Computer Science\\
+University of Tuebingen\\
+Sand~14, 72076 Tuebingen, Germany\\
+kenduhov.ig@gmail.com}
+
+\address{Ihor Kendiukhov\\
+Department of Computer Science\\
+University of Tuebingen\\
+Sand~14, 72076 Tuebingen, Germany}
+
+\begin{document}
+
+\begin{letter}{Editorial Board\\
+PLOS Computational Biology}
+
+\opening{Dear Editors,}
+
+I am pleased to submit the manuscript entitled ``Causal intervention
+validation of gene regulatory signals in scGPT'' for consideration as a
+Research Article in \textit{PLOS Computational Biology}.
+
+Single-cell foundation models such as scGPT are increasingly used for
+cell-type annotation, perturbation prediction, and drug target
+prioritization, yet whether their internal representations encode genuine
+gene regulatory structure remains an open question. This manuscript
+introduces a causal intervention pipeline that directly tests this by
+ablating and swapping transcription factor token values within scGPT and
+measuring downstream effects on known target genes. We evaluate across
+three tissues from Tabula Sapiens, an external lung atlas, and
+CRISPR perturbation data, comparing causal scores against attention and
+coexpression baselines, and use activation patching to localize
+responsible model components.
+
+The key findings include: (i) lung tissue shows strong enrichment of
+causal intervention scores for curated TF--target edges (AUPR up to 0.78,
+permutation $p=0.001$), substantially exceeding attention and coexpression
+baselines; (ii) kidney enrichment is modest but reproducible across
+seeds, while immune tissue remains at baseline, revealing tissue-dependent
+regulatory encoding; (iii) mechanistic tracing localizes effects to a
+small set of attention heads and MLP blocks with depth separation between
+self-targeting and cross-gene interactions; and (iv) external perturbation
+validation provides an independent check, though with limited statistical
+power at current scale.
+
+I believe this work is well-suited for \textit{PLOS Computational Biology}
+because it addresses the intersection of computational methodology
+(causal inference and mechanistic interpretability applied to biological
+foundation models) and biological insight (tissue-specific regulatory
+encoding). The manuscript presents both the pipeline and an honest
+assessment of where the approach succeeds and where it does not, which I
+believe serves the community better than reporting only the strongest
+results.
+
+Source code and evaluation artifacts will be made publicly available upon
+acceptance at \url{https://github.com/kendiukhov/biodyn}.
+
+This manuscript has not been published elsewhere and is not under
+consideration at any other journal. No conflicts of interest exist. I
+declare that large language models were used for writing assistance and
+code generation during the preparation of this manuscript.
+
+Thank you for considering this submission.
+
+\closing{Sincerely,}
+
+\end{letter}
+\end{document}

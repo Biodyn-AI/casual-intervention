@@ -1,0 +1,14 @@
+run,group,metrics_path
+kidney_seed42_v2,kidney_v2,outputs/causal_v2/causal_metrics.tsv
+kidney_seed7_v2,kidney_v2,outputs/causal_seed7_v2/causal_metrics.tsv
+kidney_seed13_v2,kidney_v2,outputs/causal_seed13_v2/causal_metrics.tsv
+kidney_seed21_v2,kidney_v2,outputs/causal_seed21_v2/causal_metrics.tsv
+lung_v2,lung_v2,outputs/causal_lung_v2/causal_metrics.tsv
+immune_v2,immune_v2,outputs/causal_immune_v2/causal_metrics.tsv
+immune_seed7_v2,immune_v2,outputs/causal_immune_seed7_v2/causal_metrics.tsv
+krasnow_lung_v4,krasnow_lung_v4,outputs/causal_krasnow_lung_v4/causal_metrics.tsv
+kidney_dorothea_v3,kidney_dorothea_v3,outputs/causal_dorothea_v3/causal_metrics.tsv
+kidney_rg_v2,kidney_rg_v2,outputs/causal_kidney_rg_v2/causal_metrics.tsv
+lung_rg_v2,lung_rg_v2,outputs/causal_lung_rg_v2/causal_metrics.tsv
+lung_seed7_fast_v1,lung_seed7_fast_v1,outputs/causal_lung_seed7_fast_v1/causal_metrics.tsv
+lung_hi_v1,lung_hi_v1,outputs/causal_lung_hi_v1/causal_metrics.tsv
