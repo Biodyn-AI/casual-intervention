@@ -8,9 +8,13 @@ scikit-learn>=1.1.0
 # Single-cell analysis
 scanpy>=1.9.0
 anndata>=0.8.0
+h5py>=3.7.0
 
 # Gene regulatory network references
 decoupler>=1.4.0
+
+# Classical GRN baseline comparison (scripts/grn_baseline_comparison.py)
+dcor>=0.6
 
 # scGPT (install separately from https://github.com/bowang-lab/scGPT)
 # scgpt

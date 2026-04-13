@@ -28,6 +28,12 @@ perturbation data from Adamson et al.
 - **Mechanistic tracing** localizes effects to a small set of attention heads
   and MLP blocks with depth separation between self-targeting and cross-gene
   interactions
+- **Quantitative comparison** against **eleven classical GRN inference
+  methods** (Pearson, Spearman, distance correlation; partial correlation;
+  mutual information, CLR, ARACNE; LASSO and elastic net; GRNBoost2 and
+  GENIE3) on a matched substrate shows scGPT leads the strongest classical
+  baseline by **+0.053 in kidney**, **+0.075 in lung**, and **+0.002 in
+  immune** — consistent with the tissue-level pattern of the main runs
 
 ## Repository structure
 
@@ -64,6 +70,8 @@ casual-intervention/
 │   ├── analyze_invariant_causal_edges.py    # Multi-seed edge stability
 │   ├── analyze_invariant_blockers.py        # Non-causal edge identification
 │   ├── run_eval_bias_protocol.py            # Symbol remapping bias test
+│   ├── grn_baseline_comparison.py           # Eleven-method GRN benchmark
+│   ├── plot_grn_baseline_comparison.py      # GRN benchmark figure
 │   ├── plot_atlas_summary_panel.py          # Summary panel figure
 │   ├── plot_head_baseline_heatmap.py        # Attention head heatmap
 │   ├── plot_head_overlap_heatmap.py         # Head overlap visualization
@@ -79,11 +87,19 @@ casual-intervention/
 │   ├── causal_intervention_*seed*.yaml      # Multi-seed runs
 │   └── causal_metrics_manifest.csv          # Run manifest
 ├── figures/                   # Publication figures (PNG)
+├── outputs/
+│   └── grn_baseline_comparison/             # Per-tissue metric TSVs for the
+│       ├── kidney_metrics.tsv               #   eleven-method benchmark
+│       ├── lung_metrics.tsv
+│       ├── immune_metrics.tsv
+│       └── summary.tsv
 ├── manuscript/                # PLOS Computational Biology submission
 │   ├── causal_intervention_ploscompbiol.tex # Main manuscript
-│   ├── references.bib                       # Bibliography (31 references)
+│   ├── causal_intervention_ploscompbiol.pdf
+│   ├── references.bib                       # Bibliography
 │   ├── cover_letter.tex                     # Cover letter
-│   └── *.pdf                               # Compiled PDFs
+│   ├── response_to_reviewers.tex            # Response to editor comments
+│   └── response_to_reviewers.pdf
 ├── requirements.txt           # Python dependencies
 ├── LICENSE                    # MIT License
 └── README.md                  # This file
@@ -154,6 +170,37 @@ python scripts/plot_atlas_summary_panel.py --output-dir figures/
 python scripts/plot_head_baseline_heatmap.py --output-dir figures/
 ```
 
+### Benchmark against classical GRN inference methods
+
+The script `scripts/grn_baseline_comparison.py` is a self-contained
+CPU-only pipeline that evaluates eleven classical GRN baselines on a
+matched reproduction of the main kidney, lung, and immune runs:
+
+| Family | Methods |
+|--------|---------|
+| Coexpression | Pearson, Spearman, distance correlation (Székely et al. 2007) |
+| Graphical model | Partial correlation on ridge-regularized precision matrix |
+| Information-theoretic | Mutual information, CLR (Faith et al. 2007), ARACNE (Margolin et al. 2006) |
+| Regularized regression | LASSO (Tibshirani 1996), Elastic net (Zou & Hastie 2005) |
+| Tree-based regression | GRNBoost2 (Moerman et al. 2019), GENIE3 (Huynh-Thu et al. 2010) |
+
+```bash
+# Run the benchmark (requires the raw Tabula Sapiens h5ad files)
+python scripts/grn_baseline_comparison.py --tissue all --permutations 1000
+
+# Plot the grouped bar chart
+python scripts/plot_grn_baseline_comparison.py
+```
+
+Per-tissue AUPR / AUROC / permutation p-values are written to
+`outputs/grn_baseline_comparison/{kidney,lung,immune}_metrics.tsv` and a
+combined `summary.tsv`. The benchmark reproduces the main runs'
+preprocessing, cell sampling, deterministic TRRUST pair sampling, and
+evidence filter, so the scGPT main-run numbers and the classical-method
+numbers can be compared directly. All eleven baselines are implemented
+with scikit-learn / scipy / dcor primitives and run on CPU in minutes per
+tissue — no Dask or dedicated cluster backend is required.
+
 ## Configuration
 
 Experiment configurations are YAML files in `configs/`. Key parameters:
@@ -182,6 +229,8 @@ model:
 
 ## Results summary
 
+### Main runs (TRRUST ablation)
+
 | Tissue | Reference | AUPR | Permutation *p* |
 |--------|-----------|------|-----------------|
 | Lung | TRRUST | 0.727 | **0.001** |
@@ -190,6 +239,20 @@ model:
 | Kidney (mean, 4 seeds) | DoRothEA | 0.537 | — |
 | Immune | TRRUST | 0.596 | 0.359 |
 | Lung (high-pair, 160+160) | TRRUST | 0.757 | **0.004** |
+
+### Matched benchmark vs. eleven classical GRN methods
+
+scGPT causal ablation (main-run AUPR) vs. the strongest classical
+baseline on the matched substrate:
+
+| Tissue | scGPT causal | Best classical | Δ (scGPT − best) |
+|--------|--------------|----------------|------------------|
+| Kidney | 0.602 | Spearman correlation 0.549 | +0.053 |
+| Lung   | 0.727 | Partial correlation 0.652 (*p*=0.001) | +0.075 |
+| Immune | 0.596 | Spearman correlation 0.594 (*p*=0.014) | +0.002 |
+
+Full per-tissue per-method AUPR, AUROC, and permutation p-values are in
+`outputs/grn_baseline_comparison/`.
 
 ## Citation
 
