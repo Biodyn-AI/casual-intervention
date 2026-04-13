@@ -22,51 +22,110 @@ PLOS Computational Biology}
 
 \opening{Dear Editors,}
 
-I am pleased to submit the manuscript entitled ``Causal intervention
-validation of gene regulatory signals in scGPT'' for consideration as a
-Research Article in \textit{PLOS Computational Biology}.
+I am resubmitting the manuscript entitled ``Causal intervention validation
+of gene regulatory signals in scGPT'' (previous manuscript ID:
+PCOMPBIOL-D-26-00541) for consideration as a Research Article in
+\textit{PLOS Computational Biology}. I am grateful to the editor and
+reviewers for the constructive feedback across both review rounds and
+for the opportunity to resubmit.
 
-Single-cell foundation models such as scGPT are increasingly used for
-cell-type annotation, perturbation prediction, and drug target
-prioritization, yet whether their internal representations encode genuine
-gene regulatory structure remains an open question. This manuscript
-introduces a causal intervention pipeline that directly tests this by
-ablating and swapping transcription factor token values within scGPT and
-measuring downstream effects on known target genes. We evaluate across
-three tissues from Tabula Sapiens, an external lung atlas, and
-CRISPR perturbation data, comparing causal scores against attention and
-coexpression baselines, and use activation patching to localize
-responsible model components.
+\textbf{Principal revision: quantitative comparison against previous
+methods.} The key comment in the most recent review was that, in addition
+to describing the existing literature, the manuscript must
+\textit{quantitatively} compare the proposed method against previous
+methods. This second revision addresses that comment directly by adding a
+new Results subsection, \textit{Comparison with classical GRN inference
+methods}, a new table, and a new figure that report AUPR, AUROC, and
+permutation $p$-values for the scGPT causal ablation alongside eleven
+classical GRN baselines spanning six algorithmic families on a matched
+reproduction of the main kidney, lung, and immune substrates. The
+baselines are: Pearson, Spearman, and distance correlation (coexpression);
+partial correlation on a ridge-regularized precision matrix (Gaussian
+graphical model / PC-algorithm family); pairwise mutual information, CLR
+(Faith et al.\ 2007), and ARACNE (Margolin et al.\ 2006)
+(information-theoretic family); LASSO (Tibshirani 1996) and elastic net
+(Zou \& Hastie 2005) regression (the Inferelator lineage); and GRNBoost2
+(Moerman et al.\ 2019) and GENIE3 (Huynh-Thu et al.\ 2010) (tree-based
+regression family). Every baseline is implemented from scikit-learn,
+SciPy, and \texttt{dcor} primitives and runs CPU-only, so the entire
+comparison is self-contained and reproducible end-to-end from the raw
+h5ad files, without any dedicated cluster or GPU backend.
 
-The key findings include: (i) lung tissue shows strong enrichment of
-causal intervention scores for curated TF--target edges (AUPR up to 0.78,
-permutation $p=0.001$), substantially exceeding attention and coexpression
-baselines; (ii) kidney enrichment is modest but reproducible across
-seeds, while immune tissue remains at baseline, revealing tissue-dependent
-regulatory encoding; (iii) mechanistic tracing localizes effects to a
-small set of attention heads and MLP blocks with depth separation between
-self-targeting and cross-gene interactions; and (iv) external perturbation
-validation provides an independent check, though with limited statistical
-power at current scale.
+Each baseline is evaluated on a matched reproduction of the main-run
+substrate: same raw Tabula Sapiens h5ad files, same preprocessing recipe
+(normalize\_total~=~10\,000, log1p, 5\,000 highly variable genes
+restricted to the scGPT vocabulary), 120-cell sample drawn with seed 42
+(\texttt{max\_cells=120} in the main config), deterministic 120 positive
++ 120 random negative TRRUST pair sampling from the same pair-building
+logic as \texttt{run\_causal\_interventions.py}, and the same top-1200
+evidence filter used by the scGPT dataset. On this matched substrate, the
+scGPT causal ablation AUPR exceeds the strongest classical baseline by
++0.053 in kidney (vs.\ Spearman correlation, 0.549), +0.075 in lung
+(vs.\ ridge-regularized partial correlation, 0.652, permutation
+$p{=}0.001$), and +0.002 in immune (vs.\ Spearman correlation, 0.594).
+The tissue ordering mirrors the cross-tissue pattern the paper already
+reports from the main runs: lung is the tissue where both the
+permutation-significant enrichment and the scGPT-versus-classical gap
+are largest, kidney sits between, and immune is effectively a tie,
+matching the paper's observation that immune causal scores sit close to
+attention and coexpression baselines.
 
-I believe this work is well-suited for \textit{PLOS Computational Biology}
-because it addresses the intersection of computational methodology
-(causal inference and mechanistic interpretability applied to biological
-foundation models) and biological insight (tissue-specific regulatory
-encoding). The manuscript presents both the pipeline and an honest
-assessment of where the approach succeeds and where it does not, which I
-believe serves the community better than reporting only the strongest
-results.
+Two auxiliary observations from the benchmark are discussed in the new
+Results and Discussion paragraphs. First, the strongest classical
+competitors are correlation-based methods (partial correlation in lung,
+Spearman correlation in kidney and immune) rather than the more
+computationally elaborate tree-based or information-theoretic methods,
+which sit near chance at the 120-cell budget used throughout the paper.
+This is consistent with BEELINE (Pratapa et al.\ 2020), which documents
+that tree-based and information-theoretic GRN inference typically
+requires many hundreds to thousands of cells to converge on direct
+edges. Second, the comparison therefore speaks to signal efficiency at
+modest cell counts rather than to large-scale absolute accuracy, which
+the existing GRN benchmarking literature already covers in depth: a
+pretrained foundation model that has already absorbed tens of millions
+of cells can provide directional regulatory evidence on a small held-out
+sample where classical methods do not yet have enough observations, while
+the classical methods remain the better choice when large cell numbers
+are available and the goal is explicit network construction rather than
+interrogation of a pretrained model's internal representations. These
+framings are stated explicitly in the Discussion.
 
-Source code and evaluation artifacts will be made publicly available upon
-acceptance at \url{https://github.com/Biodyn-AI/casual-intervention}.
+\textbf{Previous review round.} The editor's two previous comments on
+the first revision concerned the qualitative positioning of the method
+relative to existing GRN inference approaches and prior foundation-model
+evaluations. Those comments were addressed by an expanded literature
+survey in the Introduction (from two short paragraphs to four, adding 19
+new validated references) and by expanded positioning paragraphs in the
+Discussion. The present second revision retains all of that material and
+adds the quantitative comparison on top of it, so the manuscript now
+presents both the conceptual distinction and the empirical head-to-head
+numbers the reviewer asked for.
+
+\textbf{Summary of changes in this revision.} New Results subsection
+\textit{Comparison with classical GRN inference methods}; new table
+reporting AUPR, AUROC, and permutation $p$-values for scGPT plus eleven
+classical baselines across kidney, lung, and immune; new grouped-bar
+figure visualizing the same comparison; updated Abstract, Introduction,
+Discussion, and Conclusion to mention the comparison and its findings;
+three new references (Tibshirani 1996, Zou \& Hastie 2005, Sz\'ekely et
+al.\ 2007); and two new reproducibility scripts
+(\texttt{scripts/grn\_baseline\_comparison.py} and
+\texttt{scripts/plot\_grn\_baseline\_comparison.py}) together with
+per-tissue metric TSVs under \texttt{outputs/grn\_baseline\_comparison/}.
+A detailed point-by-point response, including the full
+matched-substrate table, accompanies this resubmission in
+\textit{response\_to\_reviewers.pdf}.
+
+Source code, evaluation artifacts, scripts, output TSVs, and the updated
+manuscript are publicly available at
+\url{https://github.com/Biodyn-AI/casual-intervention}.
 
 This manuscript has not been published elsewhere and is not under
 consideration at any other journal. No conflicts of interest exist. I
 declare that large language models were used for writing assistance and
 code generation during the preparation of this manuscript.
 
-Thank you for considering this submission.
+Thank you for considering this resubmission.
 
 \closing{Sincerely,}
 
